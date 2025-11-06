@@ -40,18 +40,8 @@ function initTerrarium() {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
 
     el.addEventListener('pointerdown', onDown);
-    el.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  bringToFront(el, plants);  // 클릭 시 맨 위로
-  pos3 = e.clientX;
-  pos4 = e.clientY;
-  document.addEventListener('pointermove', onMove);
-  document.addEventListener('pointerup', onUp, { once: true });
-});
-
 
     function onDown(e) {
-      e.preventDefault(); 
       pos3 = e.clientX;
       pos4 = e.clientY;
       document.addEventListener('pointermove', onMove);
@@ -63,7 +53,6 @@ function initTerrarium() {
       pos2 = pos4 - e.clientY;
       pos3 = e.clientX;
       pos4 = e.clientY;
-
       
       el.style.top  = (el.offsetTop  - pos2) + 'px';
       el.style.left = (el.offsetLeft - pos1) + 'px';
@@ -72,6 +61,10 @@ function initTerrarium() {
     function onUp() {
       document.removeEventListener('pointermove', onMove);
     }
+
+    el.addEventListener('dblclick', ()=>{
+      bringToFront(el); 
+    });
   }
 }
 
