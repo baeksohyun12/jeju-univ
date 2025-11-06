@@ -1,87 +1,80 @@
-const MAX_Z = 14;
+const MAX_Z = 99;
 
-document.addEventListener('DOMContentLoaded', initTerrarium);
+document.addEventListener('DOMContentLoaded', () => {
+  const stage = document.getElementById('terrarium');
 
-document.addEventListener('dragstart', (e) => {
-  if (e.target && e.target.tagName === 'IMG') {
-    e.preventDefault();
-  }
-}, true);
-
-function initTerrarium() {
-  
-  const plants = [];
-  for (let i = 1; i <= MAX_Z; i++) {
-    const el = document.getElementById('plant' + i);
-    if (!el) continue;
-   
-    if (!el.style.zIndex) el.style.zIndex = String(i);
-
-   
-    const img = el.querySelector('.plant-img');
+  const plants = Array.from(document.querySelectorAll('[id^="plant"]'));
+  plants.forEach((el, i) => {
+    
+    if (!el.style.zIndex) el.style.zIndex = String(i + 1);
+    
+    const img = el.querySelector('img');
     if (img) img.setAttribute('draggable', 'false');
+    
+    // draggable = true
+    el.setAttribute('draggable', 'true');
 
-    makeDraggable(el, plants);
-    plants.push(el);
-  }
+    //드래그 시작
+    el.addEventListener('dragstart', (e) => {
+      const r = el.getBoundingClientRect();
+      const payload = { id: el.id, dx: e.clientX - r.left, dy: e.clientY - r.top };
+      
+      currentDrag = payload;
+      bringToFront(el);
+    });
+
+    el.addEventListener('dragend', () => { el.style.opacity = ''; currentDrag = null; });
+
+    // 더블 클릭하면 맨 앞으로
+    el.addEventListener('dblclick', () => bringToFront(el));
+  });
 
   
-  function bringToFront(target) {
-    const currentZ = parseInt(target.style.zIndex || '1', 10);
-    plants.forEach((el) => {
-      const z = parseInt(el.style.zIndex || '1', 10);
-      if (z > currentZ) el.style.zIndex = String(z - 1);
-    });
-    target.style.zIndex = String(MAX_Z);
+  stage.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const data = getPayload(e) || currentDrag;
+    const el = document.getElementById(data.id);
+    if (el.parentElement !== stage) stage.appendChild(el);
+
+    const { left, top } = computePos(e, stage, el, data.dx, data.dy);
+    el.style.position = 'absolute';
+    el.style.left = left + 'px';
+    el.style.top  = top  + 'px';
+  });
+
+  stage.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const data = getPayload(e);
+    const el = document.getElementById(data.id);
+    const { left, top } = computePos(e, stage, el, data.dx, data.dy);
+    el.style.left = left + 'px';
+    el.style.top  = top  + 'px';
+    el.style.opacity = '';
+    bringToFront(el);
+  });
+
+  function bringToFront(el) {
+    const z = Math.max(...plants.map(p => parseInt(p.style.zIndex || '1', 10)), MAX_Z) + 1;
+    el.style.zIndex = String(z);
   }
 
- 
-  function makeDraggable(el, all) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-
-    el.addEventListener('pointerdown', onDown);
-
-    function onDown(e) {
-      pos3 = e.clientX;
-      pos4 = e.clientY;
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', onUp, { once: true });
-    }
-
-    function onMove(e) {
-      pos1 = pos3 - e.clientX;
-      pos2 = pos4 - e.clientY;
-      pos3 = e.clientX;
-      pos4 = e.clientY;
-      
-      el.style.top  = (el.offsetTop  - pos2) + 'px';
-      el.style.left = (el.offsetLeft - pos1) + 'px';
-    }
-
-    function onUp() {
-      document.removeEventListener('pointermove', onMove);
-    }
-
-    el.addEventListener('dblclick', ()=>{
-      bringToFront(el); 
-    });
+  function getPayload(e) {
+    const raw = e.dataTransfer && e.dataTransfer.getData('text/plain');
   }
-}
 
+  function computePos(e, stage, el, dx, dy) {
+    const r = stage.getBoundingClientRect();
+    const cs = getComputedStyle(stage);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padT = parseFloat(cs.paddingTop)  || 0;
+    const borderL = stage.clientLeft;
+    const borderT = stage.clientTop;
 
-console.log(document.getElementById('plant1'));
+    let left = e.clientX - (r.left + borderL) - padL - dx;
+    let top  = e.clientY - (r.top  + borderT) - padT - dy;
 
-dragElement(document.getElementById('plant1'));
-dragElement(document.getElementById('plant2'));
-dragElement(document.getElementById('plant3'));
-dragElement(document.getElementById('plant4'));
-dragElement(document.getElementById('plant5'));
-dragElement(document.getElementById('plant6'));
-dragElement(document.getElementById('plant7'));
-dragElement(document.getElementById('plant8'));
-dragElement(document.getElementById('plant9'));
-dragElement(document.getElementById('plant10'));
-dragElement(document.getElementById('plant11'));
-dragElement(document.getElementById('plant12'));
-dragElement(document.getElementById('plant13'));
-dragElement(document.getElementById('plant14'));
+    left = Math.max(0, Math.min(left, stage.clientWidth  - el.offsetWidth));
+    top  = Math.max(0, Math.min(top,  stage.clientHeight - el.offsetHeight));
+    return { left, top };
+  }
+});
