@@ -105,6 +105,10 @@ html, body {
   overflow: auto;
 }
 
+input {
+    text-align: center;
+}
+
 @media(prefers-color-scheme: dark){
     body{
         background-color: #333;
