@@ -14,6 +14,9 @@ const Messages = {
     KEY_EVENT_RIGHT: "KEY_EVENT_RIGHT",
     KEY_EVENT_SPACE: "KEY_EVENT_SPACE",
     COLLISION_ENEMY_LASER: "COLLISION_ENEMY_LASER",
+    GAME_END_LOSS: "GAME_END_LOSS",
+    GAME_END_WIN: "GAME_END_WIN",
+    KEY_EVENT_ENTER: "KEY_EVENT_ENTER",
 };
 
 class EventEmitter {
@@ -29,10 +32,13 @@ class EventEmitter {
             this.listeners[msg].forEach((l) => l(msg, payload));
         }
     }
+    clear() {
+        this.listeners = {};
+    }
 }
 
 let canvas, ctx;
-let heroImg, enemyImg, laserImg;
+let heroImg, enemyImg, laserImg, lifeImg;
 let gameObjects = [];
 let hero;
 let eventEmitter = new EventEmitter();
@@ -69,6 +75,11 @@ class Hero extends GameObject {
         this.height = 75;
         this.type = "Hero";
         this.cooldown = 0;
+        this.life = 3;
+        this.points = 0;
+
+        this.shieldCount = 2;
+        this.isShielded = false;
     }
 
     fire() {
@@ -86,6 +97,48 @@ class Hero extends GameObject {
     canFire() {
         return this.cooldown === 0;
     }
+
+    decrementLife() {
+        if (this.isShielded) return;
+
+        this.life--;
+        if (this.life === 0) {
+            this.dead = true;
+        }
+    }
+
+    incrementPoints() {
+        this.points += 100;
+    }
+
+    activateShield() {
+        if (this.shieldCount > 0 && !this.isShielded) {
+            this.shieldCount--;
+            this.isShielded = true;
+
+            // 2초 후 자동 종료
+            setTimeout(() => {
+                this.isShielded = false;
+            }, 2000);
+        }
+    }
+
+    draw(ctx) {
+        // 기본 hero 그리기
+        ctx.drawImage(this.img, this.x, this.y, this.width, this.height);
+
+        // 실드가 켜져 있을 때
+        if (this.isShielded) {
+            ctx.drawImage(
+                shieldImg,
+                this.x - 10,
+                this.y - 10,
+                this.width + 20,
+                this.height + 20
+            );
+        }
+    }
+
 }
 
 class AssiHero extends GameObject {
@@ -184,22 +237,27 @@ function updateGameObjects() {
         });
     });
 
+    enemies.forEach(enemy => {
+        const heroRect = hero.rectFromGameObject();
+        if (intersectRect(heroRect, enemy.rectFromGameObject())) {
+            eventEmitter.emit(Messages.COLLISION_ENEMY_HERO, { enemy });
+        }
+    })
+
+
     gameObjects = gameObjects.filter(go => !go.dead);
 }
 
 function createEnemies2(ctx, canvas, enemyImg) {
-    const ROWS = 5;
+    const COLS = 5;
+    const ROWS = 1;
 
     for (let row = 0; row < ROWS; row++) {
-        let count = ROWS - row;
-        let rowWidth = count * enemyImg.width;
-        let startX = (canvas.width - rowWidth) / 2;
-        let y = row * enemyImg.height;
-
-        for (let i = 0; i < count; i++) {
-            let x = startX + i * enemyImg.width;
-
-            let enemy = new Enemy(x, y);
+        for (let col = 0; col < COLS; col++) {
+            const x = col * enemyImg.width;
+            const y = row * enemyImg.height;
+            
+            let enemy = new Enemy(x+120, y);
             enemy.img = enemyImg;
             gameObjects.push(enemy);
         }
@@ -220,19 +278,120 @@ function createAssistHero() {
     gameObjects.push(assihero1, assihero2);
 }
 
+function drawLife() {
+    const START_POS = canvas.width - 180;
+    for(let i=0; i < hero.life; i++ ) {
+        ctx.drawImage(
+        lifeImg,
+        START_POS + (45 * (i+1) ),
+        canvas.height - 37);
+    }
+}
+
+function drawShieldCount() {
+    const START_X = 20;        // 왼쪽 여백
+    const START_Y = 20;        // 위쪽 여백
+    const SIZE = 40;           // 아이콘 크기
+    const GAP = 10;            // 간격
+
+    for (let i = 0; i < hero.shieldCount; i++) {
+        ctx.drawImage(
+            shieldImg,
+            START_X + (i * (SIZE + GAP)),
+            START_Y,
+            SIZE,
+            SIZE
+        );
+    }
+}
+
+function drawPoints() {
+    ctx.save();
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "red";
+    ctx.textAlign = "left";
+    drawText("Points: " + hero.points, 10, canvas.height-20);
+    ctx.restore();
+}
+function drawText(message, x, y) {
+    ctx.fillText(message, x, y);
+}
+
+function isHeroDead() {
+    return hero.life <= 0;
+}
+function isEnemiesDead() {
+    const enemies = gameObjects.filter((go) => go.type === "Enemy" && !go.dead);
+    return enemies.length === 0;
+}
+
+function displayMessage(message, color = "red") {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+}
+
+function endGame(win) {
+    clearInterval(gameLoopId);
+    // 게임 화면이 겹칠 수 있으니, 200ms 지연
+    setTimeout(() => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (win) {
+            displayMessage(
+            "Victory!!! Pew Pew... - Press [Enter] to start a new game Captain Pew Pew",
+            "green"
+            );
+        } else {
+            displayMessage(
+            "You died !!! Press [Enter] to start a new game Captain Pew Pew"
+            );
+        }
+    }, 200)
+}
+
+function resetGame() {
+    if (gameLoopId) {
+        clearInterval(gameLoopId); // 게임 루프 중지, 중복 실행 방지
+        eventEmitter.clear(); // 모든 이벤트 리스너 제거, 이전 게임 세션 충돌 방지
+        initGame(); // 게임 초기 상태 실행
+    }
+    gameLoopId = setInterval(() => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawGameObjects(ctx);
+        updateGameObjects();
+
+        drawPoints();
+        drawLife();
+
+        drawShieldCount();
+    }, 100);
+}
+
 window.addEventListener("keyup", (evt) => {
     if (evt.key === "ArrowUp")       eventEmitter.emit(Messages.KEY_EVENT_UP);
     else if (evt.key === "ArrowDown")  eventEmitter.emit(Messages.KEY_EVENT_DOWN);
     else if (evt.key === "ArrowLeft")  eventEmitter.emit(Messages.KEY_EVENT_LEFT);
     else if (evt.key === "ArrowRight") eventEmitter.emit(Messages.KEY_EVENT_RIGHT);
     else if (evt.keyCode === 32)       eventEmitter.emit(Messages.KEY_EVENT_SPACE);
+    else if(evt.key === "Enter") {
+        eventEmitter.emit(Messages.KEY_EVENT_ENTER);
+    }
+    else if (evt.key === "s" || evt.key === "S") {
+        eventEmitter.emit("KEY_EVENT_SHIELD");
+    }
 });
 
 function initGame() {
     gameObjects = [];
 
     createHero();
-    createAssistHero();
+    //createAssistHero();
 
     createEnemies2(ctx, canvas, enemyImg);
 
@@ -255,6 +414,38 @@ function initGame() {
 
         first.dead = true;
         second.dead = true;
+        hero.incrementPoints();
+        if (isEnemiesDead()) { // 추가
+            eventEmitter.emit(Messages.GAME_END_WIN);
+        }
+    });
+
+    eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
+        enemy.dead = true;
+        hero.decrementLife();
+        if (isHeroDead()) { // 추가
+            eventEmitter.emit(Messages.GAME_END_LOSS);
+            return; // loss before victory
+        }
+        if (isEnemiesDead()) { // 추가
+            eventEmitter.emit(Messages.GAME_END_WIN);
+        }
+    }); 
+
+    eventEmitter.on(Messages.GAME_END_WIN, () => { // 추가
+        endGame(true);
+    });
+
+    eventEmitter.on(Messages.GAME_END_LOSS, () => { // 추가
+        endGame(false);
+    });
+
+    eventEmitter.on(Messages.KEY_EVENT_ENTER, () => {
+        resetGame();
+    });
+
+    eventEmitter.on("KEY_EVENT_SHIELD", () => {
+        hero.activateShield();
     });
 }
 
@@ -263,6 +454,9 @@ function drawGameObjects(ctx) {
 }
 
 let explosionImg;
+let shieldImg;
+let gameLoopId = null;
+let pattern;
 
 window.onload = async () => {
     canvas = document.getElementById("myCanvas");
@@ -271,19 +465,26 @@ window.onload = async () => {
     heroImg = await loadTexture("assets/player.png");
     enemyImg = await loadTexture("assets/enemyShip.png");
     laserImg = await loadTexture("assets/laserRed.png");
-    explosionImg = await loadTexture("assets/laserRedShot.png")
+    explosionImg = await loadTexture("assets/laserRedShot.png");
+    lifeImg = await loadTexture("assets/life.png");
+    shieldImg = await loadTexture("assets/shield.png");
 
     const bgImg = await loadTexture('assets/starBackground.png');
-    const pattern = ctx.createPattern(bgImg, "repeat");
+    pattern = ctx.createPattern(bgImg, "repeat");
 
     initGame();
 
-    setInterval(() => {
+    gameLoopId = setInterval(() => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = pattern;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         drawGameObjects(ctx);
         updateGameObjects();
+
+        drawPoints();
+        drawLife();
+
+        drawShieldCount(); 
     }, 100);
 };
