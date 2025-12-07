@@ -43,6 +43,11 @@ let gameObjects = [];
 let hero;
 let eventEmitter = new EventEmitter();
 
+let stage = 1;
+const MAX_STAGE = 3;
+let stageMessageActive = false;
+let stageMessageText = "";
+
 class GameObject {
     constructor(x, y) {
         this.x = x;
@@ -250,14 +255,14 @@ function updateGameObjects() {
 
 function createEnemies2(ctx, canvas, enemyImg) {
     const COLS = 5;
-    const ROWS = 1;
+    const ROWS = stage;
 
     for (let row = 0; row < ROWS; row++) {
         for (let col = 0; col < COLS; col++) {
             const x = col * enemyImg.width;
             const y = row * enemyImg.height;
             
-            let enemy = new Enemy(x+120, y);
+            let enemy = new Enemy(x+250, y);
             enemy.img = enemyImg;
             gameObjects.push(enemy);
         }
@@ -390,8 +395,10 @@ window.addEventListener("keyup", (evt) => {
 function initGame() {
     gameObjects = [];
 
-    createHero();
+    //createHero();
     //createAssistHero();
+
+    gameObjects.push(hero);
 
     createEnemies2(ctx, canvas, enemyImg);
 
@@ -402,8 +409,6 @@ function initGame() {
 
     eventEmitter.on(Messages.KEY_EVENT_SPACE, () => {
         if (hero.canFire()) hero.fire();
-        if (assihero1.canFire()) assihero1.fire();
-        if(assihero2.canFire()) assihero2.fire();
     });
 
     eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
@@ -415,8 +420,9 @@ function initGame() {
         first.dead = true;
         second.dead = true;
         hero.incrementPoints();
+
         if (isEnemiesDead()) { // 추가
-            eventEmitter.emit(Messages.GAME_END_WIN);
+            nextStage();
         }
     });
 
@@ -428,7 +434,7 @@ function initGame() {
             return; // loss before victory
         }
         if (isEnemiesDead()) { // 추가
-            eventEmitter.emit(Messages.GAME_END_WIN);
+            nextStage();
         }
     }); 
 
@@ -453,6 +459,30 @@ function drawGameObjects(ctx) {
     gameObjects.forEach(go => go.draw(ctx));
 }
 
+function nextStage() {
+    if (stage < MAX_STAGE) {
+        stage ++;
+
+        gameObjects = [];
+        eventEmitter.clear();
+
+        initGame();
+
+        showStageMessage(stage);
+    } else {
+        eventEmitter.emit(Messages.GAME_END_WIN);
+    }
+}
+
+function showStageMessage(stageNumber) {
+    stageMessageActive = true;
+    stageMessageText = "STAGE " + stageNumber;
+
+    setTimeout(() => {
+        stageMessageActive = false;
+    }, 3000);
+}
+
 let explosionImg;
 let shieldImg;
 let gameLoopId = null;
@@ -472,6 +502,10 @@ window.onload = async () => {
     const bgImg = await loadTexture('assets/starBackground.png');
     pattern = ctx.createPattern(bgImg, "repeat");
 
+    hero = new Hero(canvas.width/2-45, canvas.height-canvas.height/4);
+    hero.img = heroImg;
+    gameObjects.push(hero);
+
     initGame();
 
     gameLoopId = setInterval(() => {
@@ -486,5 +520,15 @@ window.onload = async () => {
         drawLife();
 
         drawShieldCount(); 
+
+        if (stageMessageActive) {
+            ctx.save();
+            ctx.fillStyle = "white";
+            ctx.font = "50px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(stageMessageText, canvas.width / 2, canvas.height / 2);
+            ctx.restore();
+        }
+
     }, 100);
 };
