@@ -178,11 +178,35 @@ class Enemy extends GameObject {
         this.width = 98;
         this.height = 50;
         this.type = "Enemy";
+        this.cooldown = 0;
 
-        let id = setInterval(() => {
+        this.moveTimer = setInterval(() => {
             if (this.y < canvas.height - this.height) this.y += 5;
-            else clearInterval(id);
+            else clearInterval(this.moveTimer);
         }, 300);
+
+        const initialDelay = Math.random() * 10000;
+
+        this.startTimer = setTimeout(() => {
+            if (!this.dead) this.fire();
+
+            this.shootTimer = setInterval(() => {
+                if (!this.dead) this.fire();
+            }, 7000);
+
+        }, this.initialDelay);
+    }
+
+    fire() {
+        gameObjects.push(
+            new EnemyLaser(this.x + this.width / 2 - 4, this.y + this.height)
+        );
+    }
+
+    destroy() {
+        clearInterval(this.moveTimer);
+        clearInterval(this.shootTimer);
+        clearTimeout(this.startTimer);
     }
 }
 
@@ -196,6 +220,24 @@ class Laser extends GameObject {
 
         let id = setInterval(() => {
             if (this.y > 0) this.y -= 15;
+            else {
+                this.dead = true;
+                clearInterval(id);
+            }
+        }, 100);
+    }
+}
+
+class EnemyLaser extends GameObject {
+    constructor(x, y) {
+        super(x, y);
+        this.width = 9;
+        this.height = 33;
+        this.type = "EnemyLaser";
+        this.img = enemyLaserImg;
+
+        let id = setInterval(() => {
+            if (this.y < canvas.height) this.y += 15; // 아래로 이동
             else {
                 this.dead = true;
                 clearInterval(id);
@@ -251,6 +293,25 @@ function updateGameObjects() {
 
 
     gameObjects = gameObjects.filter(go => !go.dead);
+
+    const enemyLasers = gameObjects.filter(go=>go.type === "EnemyLaser");
+
+    enemyLasers.forEach(l => {
+        const heroRect = hero.rectFromGameObject();
+
+        if (intersectRect(heroRect, l.rectFromGameObject())) {
+
+            if (!hero.isShielded) {
+                hero.decrementLife();
+            }
+
+            l.dead = true;
+
+            if (isHeroDead()) {
+                eventEmitter.emit(Messages.GAME_END_LOSS);
+            }
+        }
+    });
 }
 
 function createEnemies2(ctx, canvas, enemyImg) {
@@ -358,23 +419,51 @@ function endGame(win) {
 }
 
 function resetGame() {
-    if (gameLoopId) {
-        clearInterval(gameLoopId); // 게임 루프 중지, 중복 실행 방지
-        eventEmitter.clear(); // 모든 이벤트 리스너 제거, 이전 게임 세션 충돌 방지
-        initGame(); // 게임 초기 상태 실행
-    }
+    clearInterval(gameLoopId);
+    eventEmitter.clear();
+
+    gameObjects.forEach(go => {
+        if (go.type === "Enemy") go.destroy?.();
+    });
+
+    stage = 1;
+
+    hero.x = canvas.width / 2 - hero.width / 2;
+    hero.y = canvas.height - canvas.height / 4;
+    hero.life = 3;
+    hero.points = 0;
+    hero.shieldCount = 2;
+    hero.isShielded = false;
+
+    gameObjects = [hero];
+
+    initGame();
+
     gameLoopId = setInterval(() => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = pattern;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        drawGameObjects(ctx);
-        updateGameObjects();
+        if (!stageMessageActive) {
+            drawGameObjects(ctx);
+            updateGameObjects();
+        } else {
+            drawGameObjects(ctx);
+        }
 
         drawPoints();
         drawLife();
 
         drawShieldCount();
+
+        if (stageMessageActive) {
+            ctx.save();
+            ctx.fillStyle = "white";
+            ctx.font = "50px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(stageMessageText, canvas.width / 2, canvas.height / 2);
+            ctx.restore();
+        }
     }, 100);
 }
 
@@ -398,6 +487,9 @@ function initGame() {
     //createHero();
     //createAssistHero();
 
+    hero.x = canvas.width / 2 - hero.width / 2;
+    hero.y = canvas.height - canvas.height / 4;
+
     gameObjects.push(hero);
 
     createEnemies2(ctx, canvas, enemyImg);
@@ -412,13 +504,16 @@ function initGame() {
     });
 
     eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
-        const explosionX = second.x + second.width / 2 - 30;
-        const explosionY = second.y + second.height / 2 - 30;
 
-        gameObjects.push(new Explosion(explosionX, explosionY));
+        second.destroy();
+        second.dead = true;
+
+        //const explosionX = second.x + second.width / 2 - 30;
+        //const explosionY = second.y + second.height / 2 - 30;
+
+        //gameObjects.push(new Explosion(explosionX, explosionY));
 
         first.dead = true;
-        second.dead = true;
         hero.incrementPoints();
 
         if (isEnemiesDead()) { // 추가
@@ -427,13 +522,13 @@ function initGame() {
     });
 
     eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
+        enemy.destroy();
         enemy.dead = true;
         hero.decrementLife();
         if (isHeroDead()) { // 추가
             eventEmitter.emit(Messages.GAME_END_LOSS);
-            return; // loss before victory
         }
-        if (isEnemiesDead()) { // 추가
+        else if (isEnemiesDead()) { // 추가
             nextStage();
         }
     }); 
@@ -464,8 +559,11 @@ function nextStage() {
         stage ++;
 
         gameObjects = [];
-        eventEmitter.clear();
 
+        hero.x = canvas.width / 2 - hero.width / 2;
+        hero.y = canvas.height - canvas.height / 4;
+
+        gameObjects.push(hero);
         initGame();
 
         showStageMessage(stage);
@@ -485,6 +583,7 @@ function showStageMessage(stageNumber) {
 
 let explosionImg;
 let shieldImg;
+let enemyLaserImg;
 let gameLoopId = null;
 let pattern;
 
@@ -498,6 +597,8 @@ window.onload = async () => {
     explosionImg = await loadTexture("assets/laserRedShot.png");
     lifeImg = await loadTexture("assets/life.png");
     shieldImg = await loadTexture("assets/shield.png");
+
+    enemyLaserImg = await loadTexture("assets/laserGreen.png");
 
     const bgImg = await loadTexture('assets/starBackground.png');
     pattern = ctx.createPattern(bgImg, "repeat");
@@ -513,8 +614,12 @@ window.onload = async () => {
         ctx.fillStyle = pattern;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        if(!stageMessageActive) {
+            updateGameObjects();
+        }
+
         drawGameObjects(ctx);
-        updateGameObjects();
+        hero.draw(ctx);
 
         drawPoints();
         drawLife();
