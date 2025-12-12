@@ -1,41 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Message</title>
+<<<<<<< HEAD
+
+=======
+    <title>
+    Typing game
+    </title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <script>
-    // //Add hello code
-    // function getMessage(name){
-    //   return `Hello, My name is ${name}`;
-    // }
-    // const message = getMessage(`Sohyun`);
-    // document.write(message);
-
-    //Add setInterval code
-    
-    function From (nation) {
-      document.writeln(`I'm from ${nation} !<br>`);
-    }
-    function School(univ) {
-      document.writeln(`I'm studying Computer Science at ${univ}<br>`);
-    }
-    function Want(go) {
-      document.writeln(`I want to go ${go}<br>`);
-    }
-    let count = 0;
-
-    var intro = setInterval(() => {
-      if (count === 0) From("Korea"); 
-      else if (count ===1) School("JNU");
-      else{
-        Want("home");
-        clearInterval(intro);
-      } 
-      count++;
-    }, 3000)
-    
-
-  </script>
+    <div class="title">
+        <h1>
+            Typing game !
+        </h1>
+    </div>
+    <div>
+         <p>
+            Practice your typing skills with a quote from Sherlock Holmes.
+        </p>
+        <p>Click **start** to begin!</p>
+    </div>
+    <p id="quote" class="quote"></p>
+   <div class="modal">
+    <div class="modal_body">
+            <p class="modal_msg" id="message" class="result"></p>
+            <p class="modal_msg" id="highscore" class="highscore"></p>
+            <img class="modal_icon" src="images/icon.png">
+    </div>
+   </div>
+   <div id="fx-layer" aria-live="polite">
+    <p class="error_good_Msg"></p>
+   </div>
+    <div class="icon_input">
+        <img class="icon" src="images/icon.png">
+        <img class="icon" src="images/icon.png">
+        <img class="icon" src="images/icon.png" style="margin-right: 15px;">
+        <input type="text" aria-label="current word" id="typed-value" disabled="true"/>
+        <img class="icon" src="images/icon.png" style="margin-left: 15px;">
+        <img class="icon" src="images/icon.png">
+        <img class="icon" src="images/icon.png">
+    </div>
+    <button type="button" id="start">start !</button>
+    <script defer src="script.js"></script>
+>>>>>>> week7/typing-game
 </body>
 </html>
